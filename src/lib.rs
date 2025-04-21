@@ -192,7 +192,6 @@ pub use sockref::SockRef;
 #[cfg(not(any(
     target_os = "haiku",
     target_os = "illumos",
-    target_os = "netbsd",
     target_os = "redox",
     target_os = "solaris",
 )))]
