@@ -1443,6 +1443,45 @@ impl Socket {
         }
     }
 
+    /// Set the value of the `IP_MULTICAST_IF` option for this socket.
+    ///
+    /// Specifies the interface to use for routing multicast packets.
+    /// See [`InterfaceIndexOrAddress`].
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "linux",
+        target_os = "android",
+    ))]
+    pub fn set_multicast_if_v4_n(&self, interface: &InterfaceIndexOrAddress) -> io::Result<()> {
+        #[cfg(any(target_os = "freebsd", target_os = "linux", target_os = "android",))]
+        {
+            // IP_MULTICAST_IF supports struct mreqn to set the interface
+            let mreqn = sys::to_mreqn(&Ipv4Addr::UNSPECIFIED, interface);
+            unsafe { setsockopt(self.as_raw(), sys::IPPROTO_IP, sys::IP_MULTICAST_IF, mreqn) }
+        }
+
+        #[cfg(target_os = "netbsd")]
+        {
+            // IP_MULTICAST_IF only supports struct in_addr to set the interface, but passing an
+            // address in the 0.0.0.0/8 range is interpreted as an interface index (in network
+            // byte order)
+            let addr = match interface {
+                InterfaceIndexOrAddress::Index(index) => {
+                    if *index >= 0x0100_0000 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::AddrNotAvailable,
+                            "Cannot assign requested address",
+                        ));
+                    }
+                    Ipv4Addr::from_bits(*index)
+                }
+                InterfaceIndexOrAddress::Address(a) => *a,
+            };
+            unsafe { setsockopt(self.as_raw(), sys::IPPROTO_IP, sys::IP_MULTICAST_IF, addr) }
+        }
+    }
+
     /// Get the value of the `IP_MULTICAST_LOOP` option for this socket.
     ///
     /// For more information about this option, see [`set_multicast_loop_v4`].
